@@ -203,7 +203,7 @@ def __remove_styles(s: str) -> str:
     return s
 
 
-def _request_response(model: str, messages: list[dict[str, Any]]) -> Any:
+def __request_response(model: str, messages: list[dict[str, Any]]) -> Any:
     response = openai.ChatCompletion.create(
         model=model,
         messages=messages,
@@ -229,7 +229,7 @@ def _request_response(model: str, messages: list[dict[str, Any]]) -> Any:
 
         messages.append(Message("user", "Your JSON response could not be parsed. Please restate your last message as pure JSON.")._asdict())
 
-        return _request_response(model, messages)
+        return __request_response(model, messages)
 
     except Exception as e:
         status = f"Unknown error:\n\n{Style.RED}{e}{Style.END}"
@@ -439,7 +439,7 @@ def post_to_openai(script_name: str, script_args, error: str, model: str = Envir
         Message("user", openaiPrompt)._asdict()
     ]
 
-    return _request_response(model, openAiMessages)
+    return __request_response(model, openAiMessages)
 
 
 if __name__ == "__main__":
