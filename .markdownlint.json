@@ -1,0 +1,14 @@
+{
+    "MD007": {
+        "indent": 4
+    },
+    "MD010": {
+        "spaces_per_tab": 4
+    },
+    "MD012": false,
+    "MD013": false,
+    "MD025": false,
+    "MD049": {
+        "style": "underscore"
+    }
+}

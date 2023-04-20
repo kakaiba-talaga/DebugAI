@@ -1,0 +1,12 @@
+# Ignore any directories and files that starts with a dot.
+**/.*/
+**/.*
+
+# Directories
+*venv/
+
+# Files
+*.bak
+!**/.env-*
+!.git*
+!.markdown*
