@@ -1,6 +1,6 @@
 # DebugAI
 
-OpenAI GPT assisted debugging and code correction.
+OpenAI assisted debugging and code correction.
 
 This has been _inspired_ by Wolverine ➜ [https://github.com/biobootloader/wolverine](https://github.com/biobootloader/wolverine)
 
@@ -8,6 +8,7 @@ This has been _inspired_ by Wolverine ➜ [https://github.com/biobootloader/wolv
     - [Dependencies](#dependencies)
     - [Directory and File Structure](#directory-and-file-structure)
     - [Set-up](#set-up)
+    - [Supported Scripts](#supported-scripts)
     - [Usage](#usage)
         - [Normal](#normal)
         - [Set the Model to Use](#set-the-model-to-use)
@@ -56,6 +57,19 @@ This has been _inspired_ by Wolverine ➜ [https://github.com/biobootloader/wolv
 [Go back to TOC](#debugai)
 
 
+## Supported Scripts
+
+This now supports multiple but limited types of scripts:
+
+1. Dart ➜ `*.dart`
+2. Java ➜ `*.java`
+3. Node.js ➜ `*.js`
+4. PowerShell ➜ `*.ps1`
+5. Python ➜ `*.py`
+
+[Go back to TOC](#debugai)
+
+
 ## Usage
 
 There are several ways to use this script.
@@ -88,7 +102,7 @@ python debugai.py {SCRIPT_NAME} {SCRIPT_ARGUMENTS} --confirm=True
 
 ### Restore Back-up
 
-By the default, a back-up file is created. To restore the script to its original state:
+By default, depending on the number of batch changes, there could be several back-up files being created. To restore the script to its _original state_:
 
 ```shell
 python debugai.py {SCRIPT_NAME} --restore

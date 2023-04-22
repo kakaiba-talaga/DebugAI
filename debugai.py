@@ -19,14 +19,14 @@ from enum import Enum
 from fire import Fire
 from os import access, getenv, mkdir, W_OK
 from os.path import abspath, dirname, isfile, isdir, join
-from shutil import copy
+from pathlib import Path
+from shutil import copy, which as find_executable
 from subprocess import run
 from sys import executable as py_exec
 from traceback import print_exc
 from typing import Any, Iterator, NamedTuple
 from fire import Fire
 import difflib
-# import fire
 import json
 import openai
 
@@ -37,8 +37,9 @@ import openai
 
 CURRENT_DIR: str = dirname(abspath(__file__))
 OPENAI_PROMPT: str = ""
+OPENAI_TEMPERATURE: float = 0.4
 SCRIPT_NAME: str = "DebugAI"
-SCRIPT_DESC: str = "OpenAI ChatGPT assisted debugging and code correction."
+SCRIPT_DESC: str = "OpenAI assisted debugging and code correction."
 
 
 # --------------------------------------------------
@@ -46,21 +47,15 @@ SCRIPT_DESC: str = "OpenAI ChatGPT assisted debugging and code correction."
 # --------------------------------------------------
 
 class Environment():
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = ""
-    OPENAI_ORG_ID: str = ""
+    OPENAI_API_KEY: str
+    OPENAI_MODEL: str
+    OPENAI_ORG_ID: str
 
 
 class ChangesOp(NamedTuple):
     operation: str
     line: int
     content: str
-
-
-class Operation(Enum):
-    Delete = "Delete"
-    InsertAfter = "InsertAfter"
-    Replace = "Replace"
 
 
 class Choices(NamedTuple):
@@ -86,6 +81,24 @@ class MetaConstant(type):
 
     def __setattr__(cls, key, value):
         ...
+
+
+class Models(Enum):
+    __metaclass__ = MetaConstant
+
+    Chat35 = "gpt-3.5-turbo"
+    Chat40 = "gpt-4"
+    Chat40_32K = "gpt-4-32k"
+    DaVinci35 = "text-davinci-003"
+    DaVinci35_Code = "code-davinci-002"
+
+
+class Operation(Enum):
+    __metaclass__ = MetaConstant
+
+    Delete = "Delete"
+    InsertAfter = "InsertAfter"
+    Replace = "Replace"
 
 
 class Style(metaclass=MetaConstant):
@@ -123,7 +136,7 @@ def __init() -> None:
     load_dotenv(override=True)
 
     Environment.OPENAI_API_KEY = getenv("OPENAI_API_KEY", "")
-    Environment.OPENAI_MODEL = getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    Environment.OPENAI_MODEL = getenv("OPENAI_MODEL", Models.Chat35.value)
     Environment.OPENAI_ORG_ID = getenv("OPENAI_ORG_ID", "")
 
     openai.api_key = Environment.OPENAI_API_KEY
@@ -168,6 +181,63 @@ def __header():
     history(f"Model: {Environment.OPENAI_MODEL}")
 
 
+def __get_exe(script_name: str):
+    """ Get the full path of the executable that will run `script_name`. """
+
+    exeName: str = ""
+
+    match Path(script_name).suffix:
+        case ".dart":
+            exeName = "dart"
+        case ".java":
+            exeName = "javac"
+        case ".js":
+            exeName = "node"
+        case ".ps1":
+            return "PowerShell -File"
+        case ".py":
+            return py_exec
+
+    if exeName != "":
+        exePath: str | None = find_executable(exeName)
+
+        if exePath in [None, ""]:
+            raise Exception(f"There is {Style.RED}no executable found{Style.END} to run {Style.CYAN}{script_name}{Style.END}.")
+    else:
+        raise Exception(f"The script is {Style.RED}not supported{Style.END} by {Style.YELLOW}{SCRIPT_NAME}{Style.END}: {Style.CYAN}{script_name}{Style.END}")
+
+    return str(exePath)
+
+
+def __openai_type_create(which_model: str, messages: list[dict[str, Any]]):
+    """ Creates a new chat or text completion for the provided messages and parameters. """
+
+    models = [model.value for model in Models if model.value == which_model]
+
+    if len(models) > 0:
+        match which_model:
+            case Models.Chat35.value | Models.Chat40.value | Models.Chat40_32K.value:
+                return openai.ChatCompletion.create(
+                    model=which_model,
+                    messages=messages,
+                    temperature=OPENAI_TEMPERATURE,
+                )
+            case Models.DaVinci35.value | Models.DaVinci35_Code.value:
+                return openai.Completion.create(
+                    model=which_model,
+                    messages=messages,
+                    temperature=OPENAI_TEMPERATURE,
+                )
+            case _:
+                return openai.ChatCompletion.create(
+                    model=Models.Chat35.value,
+                    messages=messages,
+                    temperature=OPENAI_TEMPERATURE,
+                )
+    else:
+        raise Exception(f"Model is {Style.RED}not supported{Style.END}: {Style.CYAN}{which_model}{Style.END}")
+
+
 def __read_file_base(fileName: str, lineByLine: bool = False) -> list[str] | str:
     """ Reads the contents from the file specified in `fileName`. """
 
@@ -204,12 +274,7 @@ def __remove_styles(s: str) -> str:
 
 
 def __request_response(model: str, messages: list[dict[str, Any]]) -> Any:
-    response = openai.ChatCompletion.create(
-        model=model,
-        messages=messages,
-        temperature=0.4,
-    )
-
+    response = __openai_type_create(model, messages)
     choices = Choices(**response["choices"][0]) # type: ignore
     message = Message(**choices.message)
     messages.append(message._asdict())
@@ -220,20 +285,25 @@ def __request_response(model: str, messages: list[dict[str, Any]]) -> Any:
         jsonStartIndex: int = content.index("[")
         jsonData: str = content[jsonStartIndex:]
         jsonResponse = json.loads(jsonData)
+        jsonData = jsonData.replace("\n", "\n  ")
+        history(f"GPT Response:\n\n  {jsonData}")
 
     except (json.decoder.JSONDecodeError, ValueError) as e:
-        status = f"Invalid JSON >>> {e}\n\nRerunning the query...\n\n"
-        status += f"GPT Response:\n\n{Style.YELLOW}{content}{Style.END}\n\n"
+        content = content.replace("\n", "\n  ")
+        status = f"{Style.RED}Error{Style.END}:\n\n  Invalid JSON. {e}\n\n"
+        status += f"{Style.YELLOW}GPT Response{Style.END}:\n\n  {content}\n\n"
+        status += "Rerunning the query...\n"
         print(status)
         history(status)
 
-        messages.append(Message("user", "Your JSON response could not be parsed. Please restate your last message as pure JSON.")._asdict())
-
+        messages.append(Message("user", "Your JSON response could not be parsed. Please reiterate your last message as pure JSON.")._asdict())
         return __request_response(model, messages)
 
     except Exception as e:
-        status = f"Unknown error:\n\n{Style.RED}{e}{Style.END}"
-        status += f"GPT Response:\n\n{Style.YELLOW}{content}{Style.END}"
+        content = content.replace("\n", "\n  ")
+        error = str(e).replace("\n", "\n  ")
+        status = f"{Style.RED}Unknown error{Style.END}:\n\n  {error}"
+        status += f"{Style.YELLOW}GPT Response{Style.END}:\n\n  {content}"
         raise Exception(status)
 
     return jsonResponse
@@ -270,7 +340,7 @@ def apply_changes(file_path: str, changes: list[dict[str, Any]], confirm: bool =
     # Get the differences between the original and the changes.
     lineDiffs: Iterator[str] = difflib.unified_diff(originalFileLines, fileLines, lineterm="")
 
-    print(f"\n{Style.YELLOW}Recommended changes to be made{Style.END}:")
+    print(f"{Style.YELLOW}Recommended changes to be made{Style.END}:")
 
     for lineDiff in lineDiffs:
         color: str = Style.WHITE
@@ -282,7 +352,7 @@ def apply_changes(file_path: str, changes: list[dict[str, Any]], confirm: bool =
         elif lineDiff.startswith("-"):
             color = Style.RED
 
-        print(f"{color}  {lineDiff}{Style.END}")
+        print(f"  {color}{lineDiff}{Style.END}")
 
     if len(explanations) > 0:
         status = f"\n{Style.BLUE}Explanation{Style.END}:\n\n"
@@ -291,7 +361,6 @@ def apply_changes(file_path: str, changes: list[dict[str, Any]], confirm: bool =
             status += f"  - {explanation}\n"
 
         print(status)
-        history(status)
 
     if confirm:
         confirmApply = input("Do you want to apply these changes? (Y/n): ")
@@ -368,22 +437,25 @@ def main(script_name: str, *script_args, restore: bool = False, model: str = Env
             history(str(status))
             raise Exception(status)
 
-    script_args = [str(arg) for arg in script_args]
+    exePath: str = __get_exe(script_name)
+    scriptArgs: list[str] = [str(arg) for arg in script_args]
 
     while True:
-        command: str = f"{py_exec} {script_name} {' '.join(script_args)}"
+        command: str = f"{exePath} {script_name} {' '.join(scriptArgs)}"
         cmdOutput, cmdError = execute_command(command.strip())
         history(f"{command = }")
 
         if cmdError in [None, ""]:
             status = f"{Style.CYAN}{script_name}{Style.END} has executed {Style.GREEN}without{Style.END} any errors.\n\n"
-            status += f"Output:\n\n{cmdOutput}"
+            status += f"Output:\n\n  {cmdOutput}"
             print(status)
             history(status)
             break
         else:
+            cmdError = cmdError.replace("\n", "\n  ")
+
             if f"{script_name} --help" in cmdError:
-                status = f"{Style.RED}Error{Style.END}:\n\n{cmdError.strip()}"
+                status = f"{Style.RED}Error{Style.END}:\n\n  {cmdError.strip()}"
                 print(status)
                 history(status)
                 exit(1)
@@ -392,11 +464,11 @@ def main(script_name: str, *script_args, restore: bool = False, model: str = Env
             copy(script_name, f"{script_name}_{iterCount}.bak")
 
             status = f"{Style.CYAN}{script_name}{Style.END} has encountered {Style.RED}some issues{Style.END}. Trying to fix it...\n\n"
-            status += f"{Style.RED}Error{Style.END}:\n\n{cmdError.strip()}\n\n"
+            status += f"{Style.RED}Error{Style.END}:\n\n  {cmdError.strip()}\n\n"
             print(status)
             history(status)
 
-            changes = post_to_openai(script_name, script_args, cmdError, model)
+            changes = post_to_openai(script_name, scriptArgs, cmdError, model)
 
             if len(changes) > 0:
                 # Create another backup of the script when there are more changes since the last one.
@@ -409,7 +481,7 @@ def main(script_name: str, *script_args, restore: bool = False, model: str = Env
                 status = f"Rerunning...\n"
                 print(status)
             else:
-                status = "There are no recommended changes even though there are issues."
+                status = f"There are {Style.RED}no{Style.END} recommended changes even though there are issues."
                 history(status)
                 raise Exception(status)
 
@@ -425,7 +497,7 @@ def post_to_openai(script_name: str, script_args, error: str, model: str = Envir
 
     scriptContentLines: str = "".join(scriptLines)
     openaiPrompt: str = (
-        "Here is the script that needs fixing:\n\n"
+        "Here is the script that needs to be fixed:\n\n"
         f"{scriptContentLines}\n\n"
         "Here are the arguments that were provided:\n\n"
         f"{script_args}\n\n"
@@ -434,12 +506,12 @@ def post_to_openai(script_name: str, script_args, error: str, model: str = Envir
         "Please provide your suggested changes and remember to stick to the exact format as described earlier."
     )
 
-    openAiMessages: list[dict[str, Any]] = [
+    openaiMessages: list[dict[str, Any]] = [
         Message("system", OPENAI_PROMPT)._asdict(),
         Message("user", openaiPrompt)._asdict()
     ]
 
-    return __request_response(model, openAiMessages)
+    return __request_response(model, openaiMessages)
 
 
 if __name__ == "__main__":
