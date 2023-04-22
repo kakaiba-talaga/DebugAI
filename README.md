@@ -20,7 +20,7 @@ This has been _inspired_ by Wolverine ➜ [https://github.com/biobootloader/wolv
 
 ## Dependencies
 
-- Python `>= 3.11`
+- Python `>= 3.10`, `<= 3.11`
 
 
 ## Directory and File Structure

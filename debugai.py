@@ -4,11 +4,13 @@ from __future__ import annotations
 from sys import version, version_info
 
 
-pVersion: tuple[int, int] = (int(3), int(11))
+pVersion: tuple[int, int] = (int(3), int(10))
+pExclude: tuple[int, int] = (int(3), int(12))
 versionPass: bool = int(version_info[0]) == pVersion[0] and int(version_info[1]) >= pVersion[1]
+excludePass: bool = int(version_info[0]) == pExclude[0] and int(version_info[1]) < pExclude[1]
 
-if not versionPass:
-    print(f"Python >= {pVersion[0]}.{pVersion[1]} is required to run this script.")
+if not versionPass or not excludePass:
+    print(f"Python >= {pVersion[0]}.{pVersion[1]}, < {pExclude[0]}.{pExclude[1]} is required to run this script.")
     print(f"Installed: Python {version}")
     exit(1)
 
