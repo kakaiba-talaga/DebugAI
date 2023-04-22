@@ -8,5 +8,5 @@
 # Files
 *.bak
 !**/.env-*
-!.git*
+!**/.git*
 !.markdown*
