@@ -25,7 +25,7 @@ This has been _inspired_ by Wolverine ➜ [https://github.com/biobootloader/wolv
 
 ## Directory and File Structure
 
-- `/.debugai-history` ➜ This is the directory where the logs are being stored.
+- `.debugai-history/` ➜ This is the directory where the logs are being stored.
 
 - `.env-template` ➜ The environment template file to get you started. Specify the credentials in key-value format. Rename this to `.env`. Once _renamed_, it is meant to be stored _locally_ and _not to be uploaded_ to any code repositories.
 
