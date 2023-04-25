@@ -178,9 +178,6 @@ def __header():
     separator = '-' * ((len(SCRIPT_NAME) + len(SCRIPT_DESC)) + 3)
     print(f"{Style.CYAN}{SCRIPT_NAME}{Style.END} | {Style.MAGENTA}{SCRIPT_DESC}{Style.END}")
     print(separator)
-    print(f"The {Style.UNDERLINE}model{Style.END} being used is {Style.GREEN}{Environment.OPENAI_MODEL}{Style.END}.\n")
-
-    history(f"Model: {Environment.OPENAI_MODEL}")
 
 
 def __get_exe(script_name: str):
@@ -214,30 +211,25 @@ def __get_exe(script_name: str):
 def __openai_type_create(which_model: str, messages: list[dict[str, Any]]):
     """ Creates a new chat or text completion for the provided messages and parameters. """
 
-    models = [model.value for model in Models if model.value == which_model]
-
-    if len(models) > 0:
-        match which_model:
-            case Models.Chat35.value | Models.Chat40.value | Models.Chat40_32K.value:
-                return openai.ChatCompletion.create(
-                    model=which_model,
-                    messages=messages,
-                    temperature=OPENAI_TEMPERATURE,
-                )
-            case Models.DaVinci35.value | Models.DaVinci35_Code.value:
-                return openai.Completion.create(
-                    model=which_model,
-                    messages=messages,
-                    temperature=OPENAI_TEMPERATURE,
-                )
-            case _:
-                return openai.ChatCompletion.create(
-                    model=Models.Chat35.value,
-                    messages=messages,
-                    temperature=OPENAI_TEMPERATURE,
-                )
-    else:
-        raise Exception(f"Model is {Style.RED}not supported{Style.END}: {Style.CYAN}{which_model}{Style.END}")
+    match which_model:
+        case Models.Chat35.value | Models.Chat40.value | Models.Chat40_32K.value:
+            return openai.ChatCompletion.create(
+                model=which_model,
+                messages=messages,
+                temperature=OPENAI_TEMPERATURE,
+            )
+        case Models.DaVinci35.value | Models.DaVinci35_Code.value:
+            return openai.Completion.create(
+                model=which_model,
+                messages=messages,
+                temperature=OPENAI_TEMPERATURE,
+            )
+        case _:
+            return openai.ChatCompletion.create(
+                model=Models.Chat35.value,
+                messages=messages,
+                temperature=OPENAI_TEMPERATURE,
+            )
 
 
 def __read_file_base(fileName: str, lineByLine: bool = False) -> list[str] | str:
@@ -422,6 +414,24 @@ def history(message: str) -> None:
 
 
 def main(script_name: str, *script_args, restore: bool = False, model: str = Environment.OPENAI_MODEL, confirm: bool = False):
+    __header()
+
+    if Environment.OPENAI_API_KEY in [None, ""]:
+        print(f"The OpenAI {Style.CYAN}API Key{Style.END} is required before you can use this script.")
+        exit(1)
+
+    if model != Environment.OPENAI_MODEL:
+        validatedModel: list[str] = [str(m.value) for m in Models if str(m.value) == model]
+
+        if len(validatedModel) == 0:
+            print(f"You have specified an {Style.RED}invalid{Style.END} model: {Style.CYAN}{model}{Style.END}")
+            exit(1)
+        else:
+            Environment.OPENAI_MODEL = model
+
+    print(f"The {Style.UNDERLINE}model{Style.END} being used is {Style.GREEN}{Environment.OPENAI_MODEL}{Style.END}.\n")
+    history(f"Model: {Environment.OPENAI_MODEL}")
+
     status: str = ""
     iterCount: int = 0
     currIterCount: int = iterCount
@@ -431,13 +441,15 @@ def main(script_name: str, *script_args, restore: bool = False, model: str = Env
 
         if isfile(backupFile):
             copy(backupFile, script_name)
-            status = f"Restored {script_name} to its original state."
-            history(str(status))
+            status = f"Restored {Style.CYAN}{script_name}{Style.END} to its original state."
+            print(status)
+            history(status)
             exit(0)
         else:
-            status = f"There is no back-up file to restore for {script_name}."
-            history(str(status))
-            raise Exception(status)
+            status = f"There is no back-up file to restore for {Style.CYAN}{script_name}{Style.END}."
+            print(status)
+            history(status)
+            exit(1)
 
     exePath: str = __get_exe(script_name)
     scriptArgs: list[str] = [str(arg) for arg in script_args]
@@ -465,8 +477,9 @@ def main(script_name: str, *script_args, restore: bool = False, model: str = Env
             # Create a backup of the original script.
             copy(script_name, f"{script_name}_{iterCount}.bak")
 
-            status = f"{Style.CYAN}{script_name}{Style.END} has encountered {Style.RED}some issues{Style.END}. Trying to fix it...\n\n"
+            status = f"{Style.CYAN}{script_name}{Style.END} has encountered {Style.RED}some issues{Style.END}.\n\n"
             status += f"{Style.RED}Error{Style.END}:\n\n  {cmdError.strip()}\n\n"
+            status += "Debugging...\n"
             print(status)
             history(status)
 
@@ -485,12 +498,12 @@ def main(script_name: str, *script_args, restore: bool = False, model: str = Env
             else:
                 status = f"There are {Style.RED}no{Style.END} recommended changes even though there are issues."
                 history(status)
-                raise Exception(status)
+                exit(0)
 
         iterCount += 1
 
 
-def post_to_openai(script_name: str, script_args, error: str, model: str = Environment.OPENAI_MODEL):
+def post_to_openai(script_name: str, script_args, error: str, model: str):
     fileLines: list[str] = __read_file_line(script_name)
     scriptLines: list[str] = []
 
@@ -504,8 +517,7 @@ def post_to_openai(script_name: str, script_args, error: str, model: str = Envir
         "Here are the arguments that were provided:\n\n"
         f"{script_args}\n\n"
         "Here is the error message:\n\n"
-        f"{error}\n"
-        "Please provide your suggested changes and remember to stick to the exact format as described earlier."
+        f"{error}"
     )
 
     openaiMessages: list[dict[str, Any]] = [
@@ -517,25 +529,18 @@ def post_to_openai(script_name: str, script_args, error: str, model: str = Envir
 
 
 if __name__ == "__main__":
-    __header()
-
     try:
-        if Environment.OPENAI_API_KEY in [None, ""]:
-            raise Exception(f"The OpenAI {Style.CYAN}API Key{Style.END} is required before you can use this script.")
-
         OPENAI_PROMPT = __read_file("openai_prompt.txt")
-
         Fire(main)
 
     except Exception as error:
-        print()
         print(f"{Style.INVERSE}{Style.RED}Something went wrong:{Style.END}")
         print()
         print(error)
         history(str(error))
 
         # Print the stack trace to give a hint where to start looking.
-        print(f"\n{Style.INVERSE}{Style.WHITE}Stack Trace:{Style.END}")
+        print(f"\n\n{Style.INVERSE}{Style.WHITE}Stack Trace:{Style.END}\n")
         print_exc()
 
     except KeyboardInterrupt:
