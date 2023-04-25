@@ -189,7 +189,7 @@ def __get_exe(script_name: str):
         case ".dart":
             exeName = "dart"
         case ".java":
-            exeName = "javac"
+            exeName = "java"
         case ".js":
             exeName = "node"
         case ".ps1":
