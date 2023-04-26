@@ -17,7 +17,6 @@ if not versionPass or not excludePass:
 
 from datetime import datetime
 from dotenv import load_dotenv
-from enum import Enum
 from fire import Fire
 from os import access, getenv, mkdir, W_OK
 from os.path import abspath, dirname, isfile, isdir, join
@@ -34,17 +33,6 @@ import openai
 
 
 # --------------------------------------------------
-#   GLOBAL VARIABLES
-# --------------------------------------------------
-
-CURRENT_DIR: str = dirname(abspath(__file__))
-OPENAI_PROMPT: str = ""
-OPENAI_TEMPERATURE: float = 0.4
-SCRIPT_NAME: str = "DebugAI"
-SCRIPT_DESC: str = "OpenAI assisted debugging and code correction."
-
-
-# --------------------------------------------------
 #   MODELS
 # --------------------------------------------------
 
@@ -55,7 +43,7 @@ class Environment():
 
 
 class ChangesOp(NamedTuple):
-    operation: str
+    operation: Operation
     line: int
     content: str
 
@@ -85,22 +73,26 @@ class MetaConstant(type):
         ...
 
 
-class Models(Enum):
-    __metaclass__ = MetaConstant
+class Model(metaclass=MetaConstant):
+    """ OpenAI GPT models. """
 
-    Chat35 = "gpt-3.5-turbo"
-    Chat40 = "gpt-4"
-    Chat40_32K = "gpt-4-32k"
-    DaVinci35 = "text-davinci-003"
-    DaVinci35_Code = "code-davinci-002"
+    Chat35: str = "gpt-3.5-turbo"
+    Chat40: str = "gpt-4"
+    Chat40_32K: str = "gpt-4-32k"
+    DaVinci35: str = "text-davinci-003"
+    DaVinci35_Code: str = "code-davinci-002"
 
 
-class Operation(Enum):
-    __metaclass__ = MetaConstant
+class Operation(metaclass=MetaConstant):
+    Delete: str = "Delete"
+    InsertAfter: str = "InsertAfter"
+    Replace: str = "Replace"
 
-    Delete = "Delete"
-    InsertAfter = "InsertAfter"
-    Replace = "Replace"
+
+class Role(metaclass=MetaConstant):
+    Assistant: str = "assistant"
+    System: str = "system"
+    User: str = "user"
 
 
 class Style(metaclass=MetaConstant):
@@ -114,38 +106,23 @@ class Style(metaclass=MetaConstant):
     ```
     """
 
-    END         = "\033[0m"
-    BOLD        = "\033[1m"
-    UNDERLINE   = "\033[4m"
-    INVERSE     = "\033[7m"
-    BLACK       = "\033[30m"
-    RED         = "\033[91m"
-    GREEN       = "\033[92m"
-    YELLOW      = "\033[93m"
-    BLUE        = "\033[94m"
-    MAGENTA     = "\033[95m"
-    CYAN        = "\033[96m"
-    WHITE       = "\033[97m"
+    END: str        = "\033[0m"
+    BOLD: str       = "\033[1m"
+    UNDERLINE: str  = "\033[4m"
+    INVERSE: str    = "\033[7m"
+    BLACK: str      = "\033[30m"
+    RED: str        = "\033[91m"
+    GREEN: str      = "\033[92m"
+    YELLOW: str     = "\033[93m"
+    BLUE: str       = "\033[94m"
+    MAGENTA: str    = "\033[95m"
+    CYAN: str       = "\033[96m"
+    WHITE: str      = "\033[97m"
 
 
 # --------------------------------------------------
 #   PRIVATE FUNCTIONS
 # --------------------------------------------------
-
-def __init() -> None:
-    """ Initialize and prepare the script for execution. """
-
-    load_dotenv(override=True)
-
-    Environment.OPENAI_API_KEY = getenv("OPENAI_API_KEY", "")
-    Environment.OPENAI_MODEL = getenv("OPENAI_MODEL", Models.Chat35.value)
-    Environment.OPENAI_ORG_ID = getenv("OPENAI_ORG_ID", "")
-
-    openai.api_key = Environment.OPENAI_API_KEY
-
-    if Environment.OPENAI_ORG_ID not in [None, ""]:
-        openai.organization = Environment.OPENAI_ORG_ID
-
 
 def __generate_date_value(separate: bool = False) -> str:
     """
@@ -159,25 +136,6 @@ def __generate_date_value(separate: bool = False) -> str:
     separator = "-" if separate else ""
 
     return dateToday.strftime(f"%Y{separator}%m{separator}%d")
-
-
-def __has_write_access(directory: str | None = None) -> bool:
-    """ Checks if the current user has write permission for the `directory`. """
-
-    directory = CURRENT_DIR if directory == None else directory
-
-    if directory in [None, ""]:
-        raise Exception("The directory to check for write access should be specified.")
-
-    return access(directory, W_OK)
-
-
-def __header():
-    """ Prints a header for this script. """
-
-    separator = '-' * ((len(SCRIPT_NAME) + len(SCRIPT_DESC)) + 3)
-    print(f"{Style.CYAN}{SCRIPT_NAME}{Style.END} | {Style.MAGENTA}{SCRIPT_DESC}{Style.END}")
-    print(separator)
 
 
 def __get_exe(script_name: str):
@@ -208,17 +166,55 @@ def __get_exe(script_name: str):
     return str(exePath)
 
 
-def __openai_type_create(which_model: str, messages: list[dict[str, Any]]):
+def __has_write_access(directory: str | None = None) -> bool:
+    """ Checks if the current user has write permission for the `directory`. """
+
+    directory = CURRENT_DIR if directory == None else directory
+
+    if directory in [None, ""]:
+        raise Exception("The directory to check for write access should be specified.")
+
+    return access(directory, W_OK)
+
+
+def __header():
+    """ Prints a header for this script. """
+
+    separator = '-' * ((len(SCRIPT_NAME) + len(SCRIPT_DESC)) + 3)
+    print(f"{Style.CYAN}{SCRIPT_NAME}{Style.END} | {Style.MAGENTA}{SCRIPT_DESC}{Style.END}")
+    print(separator)
+
+
+def __init() -> None:
+    """ Initialize and prepare the script for execution. """
+
+    load_dotenv(override=True)
+
+    Environment.OPENAI_API_KEY = getenv("OPENAI_API_KEY", "")
+    Environment.OPENAI_MODEL = getenv("OPENAI_MODEL", Model.Chat35)
+    Environment.OPENAI_ORG_ID = getenv("OPENAI_ORG_ID", "")
+
+    if Environment.OPENAI_API_KEY in [None, ""]:
+        print(f"The OpenAI {Style.CYAN}API Key{Style.END} is required before you can use this script.")
+        exit(1)
+
+    openai.api_key = Environment.OPENAI_API_KEY
+
+    if Environment.OPENAI_ORG_ID not in [None, ""]:
+        openai.organization = Environment.OPENAI_ORG_ID
+
+
+def __openai_type_create(which_model: str, messages: list[dict[str, str]]):
     """ Creates a new chat or text completion for the provided messages and parameters. """
 
     match which_model:
-        case Models.Chat35.value | Models.Chat40.value | Models.Chat40_32K.value:
+        case Model.Chat35 | Model.Chat40 | Model.Chat40_32K:
             return openai.ChatCompletion.create(
                 model=which_model,
                 messages=messages,
                 temperature=OPENAI_TEMPERATURE,
             )
-        case Models.DaVinci35.value | Models.DaVinci35_Code.value:
+        case Model.DaVinci35 | Model.DaVinci35_Code:
             return openai.Completion.create(
                 model=which_model,
                 messages=messages,
@@ -226,7 +222,7 @@ def __openai_type_create(which_model: str, messages: list[dict[str, Any]]):
             )
         case _:
             return openai.ChatCompletion.create(
-                model=Models.Chat35.value,
+                model=Model.Chat35,
                 messages=messages,
                 temperature=OPENAI_TEMPERATURE,
             )
@@ -267,43 +263,42 @@ def __remove_styles(s: str) -> str:
     return s
 
 
-def __request_response(model: str, messages: list[dict[str, Any]]) -> Any:
+def __request_response(model: str, messages: list[dict[str, str]]) -> Any:
+    jsonResponse: Any = ""
     response = __openai_type_create(model, messages)
     choices = Choices(**response["choices"][0]) # type: ignore
     message = Message(**choices.message)
+    origContent: str = message.content
+    formattedContent: str = origContent.replace("\n", "\n  ")
+
+    # Include the response for context.
     messages.append(message._asdict())
-    content: str = message.content
-    jsonResponse: Any = ""
 
     try:
-        jsonStartIndex: int = content.index("[")
-        jsonData: str = content[jsonStartIndex:]
-        jsonResponse = json.loads(jsonData)
-        jsonData = jsonData.replace("\n", "\n  ")
-        history(f"GPT Response:\n\n  {jsonData}")
+        jsonStartIndex: int = origContent.index("[")
+        jsonContent: str = origContent[jsonStartIndex:]
+        jsonResponse = json.loads(jsonContent)
+        history(f"GPT Response:\n\n{origContent}")
 
     except (json.decoder.JSONDecodeError, ValueError) as e:
-        content = content.replace("\n", "\n  ")
         status = f"{Style.RED}Error{Style.END}:\n\n  Invalid JSON. {e}\n\n"
-        status += f"{Style.YELLOW}GPT Response{Style.END}:\n\n  {content}\n\n"
+        status += f"{Style.YELLOW}GPT Response{Style.END}:\n\n  {formattedContent}\n\n"
         status += "Rerunning the query...\n"
         print(status)
         history(status)
 
-        messages.append(Message("user", "Your JSON response could not be parsed. Please reiterate your last message as pure JSON.")._asdict())
+        # Add more context.
+        messages.append(Message(Role.User, f"Invalid JSON. {e} Please fix and reiterate your last response.")._asdict())
+
         return __request_response(model, messages)
 
     except Exception as e:
-        content = content.replace("\n", "\n  ")
         error = str(e).replace("\n", "\n  ")
         status = f"{Style.RED}Unknown error{Style.END}:\n\n  {error}"
-        status += f"{Style.YELLOW}GPT Response{Style.END}:\n\n  {content}"
+        status += f"{Style.YELLOW}GPT Response{Style.END}:\n\n  {formattedContent}"
         raise Exception(status)
 
     return jsonResponse
-
-
-__init()
 
 
 # --------------------------------------------------
@@ -324,15 +319,15 @@ def apply_changes(file_path: str, changes: list[dict[str, Any]], confirm: bool =
 
     for change in operationChanges:
         match change.operation:
-            case Operation.Delete.value:
+            case Operation.Delete:
                 del fileLines[change.line - 1]
-            case Operation.InsertAfter.value:
+            case Operation.InsertAfter:
                 fileLines.insert(change.line, f"{change.content}\n")
-            case Operation.Replace.value:
+            case Operation.Replace:
                 fileLines[change.line - 1] = f"{change.content}\n"
 
     # Get the differences between the original and the changes.
-    lineDiffs: Iterator[str] = difflib.unified_diff(originalFileLines, fileLines, lineterm="")
+    lineDiffs: Iterator[str] = difflib.unified_diff(originalFileLines, fileLines, lineterm = "")
 
     print(f"{Style.YELLOW}Recommended changes to be made{Style.END}:")
 
@@ -341,8 +336,6 @@ def apply_changes(file_path: str, changes: list[dict[str, Any]], confirm: bool =
 
         if lineDiff.startswith("+"):
             color = Style.GREEN
-        elif lineDiff.startswith("---"):
-            pass
         elif lineDiff.startswith("-"):
             color = Style.RED
 
@@ -413,15 +406,9 @@ def history(message: str) -> None:
             fileOut.write(f"{timestamp}{__remove_styles(message)}\n")
 
 
-def main(script_name: str, *script_args, restore: bool = False, model: str = Environment.OPENAI_MODEL, confirm: bool = False):
-    __header()
-
-    if Environment.OPENAI_API_KEY in [None, ""]:
-        print(f"The OpenAI {Style.CYAN}API Key{Style.END} is required before you can use this script.")
-        exit(1)
-
-    if model != Environment.OPENAI_MODEL:
-        validatedModel: list[str] = [str(m.value) for m in Models if str(m.value) == model]
+def main(script_name: str, *script_args, restore: bool = False, model: str = "", confirm: bool = False):
+    if model.strip() != "":
+        validatedModel: list[str] = [m for m in vars(Model) if m == model]
 
         if len(validatedModel) == 0:
             print(f"You have specified an {Style.RED}invalid{Style.END} model: {Style.CYAN}{model}{Style.END}")
@@ -520,17 +507,30 @@ def post_to_openai(script_name: str, script_args, error: str, model: str):
         f"{error}"
     )
 
-    openaiMessages: list[dict[str, Any]] = [
-        Message("system", OPENAI_PROMPT)._asdict(),
-        Message("user", openaiPrompt)._asdict()
+    openaiMessages: list[dict[str, str]] = [
+        Message(Role.System, OPENAI_PROMPT)._asdict(),
+        Message(Role.User, openaiPrompt)._asdict()
     ]
 
     return __request_response(model, openaiMessages)
 
 
+# --------------------------------------------------
+#   GLOBAL VARIABLES
+# --------------------------------------------------
+
+CURRENT_DIR: str = dirname(abspath(__file__))
+OPENAI_PROMPT: str = __read_file("openai_prompt.txt")
+OPENAI_TEMPERATURE: float = 0.4
+SCRIPT_NAME: str = "DebugAI"
+SCRIPT_DESC: str = "OpenAI assisted debugging and code correction."
+
+
 if __name__ == "__main__":
+    __header()
+    __init()
+
     try:
-        OPENAI_PROMPT = __read_file("openai_prompt.txt")
         Fire(main)
 
     except Exception as error:
