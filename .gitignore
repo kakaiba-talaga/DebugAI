@@ -9,4 +9,6 @@
 *.bak
 !**/.env-*
 !**/.git*
+!**/*.*-sample
 !.markdown*
+buggy_*.*
