@@ -79,17 +79,18 @@ class Model(metaclass=MetaConstant):
     Chat35: str = "gpt-3.5-turbo"
     Chat40: str = "gpt-4"
     Chat40_32K: str = "gpt-4-32k"
-    DaVinci35: str = "text-davinci-003"
-    DaVinci35_Code: str = "code-davinci-002"
 
 
 class Operation(metaclass=MetaConstant):
+    """ DebugAI debug operations. """
     Delete: str = "Delete"
     InsertAfter: str = "InsertAfter"
     Replace: str = "Replace"
 
 
 class Role(metaclass=MetaConstant):
+    """ OpenAI ChatGPT message roles. """
+
     Assistant: str = "assistant"
     System: str = "system"
     User: str = "user"
@@ -204,28 +205,14 @@ def __init() -> None:
         openai.organization = Environment.OPENAI_ORG_ID
 
 
-def __openai_type_create(which_model: str, messages: list[dict[str, str]]):
-    """ Creates a new chat or text completion for the provided messages and parameters. """
+def __openai_type_create(model: str, messages: list[dict[str, str]]):
+    """ Creates a new chat completion for the provided messages and parameters. """
 
-    match which_model:
-        case Model.Chat35 | Model.Chat40 | Model.Chat40_32K:
-            return openai.ChatCompletion.create(
-                model=which_model,
-                messages=messages,
-                temperature=OPENAI_TEMPERATURE,
-            )
-        case Model.DaVinci35 | Model.DaVinci35_Code:
-            return openai.Completion.create(
-                model=which_model,
-                messages=messages,
-                temperature=OPENAI_TEMPERATURE,
-            )
-        case _:
-            return openai.ChatCompletion.create(
-                model=Model.Chat35,
-                messages=messages,
-                temperature=OPENAI_TEMPERATURE,
-            )
+    return openai.ChatCompletion.create(
+        model=model,
+        messages=messages,
+        temperature=OPENAI_TEMPERATURE,
+    )
 
 
 def __read_file_base(fileName: str, lineByLine: bool = False) -> list[str] | str:
@@ -275,8 +262,12 @@ def __request_response(model: str, messages: list[dict[str, str]]) -> Any:
     messages.append(message._asdict())
 
     try:
+        # Instead of just loading the supposed JSON response,
+        #   it's better to look for it in the response before parsing it
+        #   in case there are other texts before or after the actual JSON.
         jsonStartIndex: int = origContent.index("[")
         jsonContent: str = origContent[jsonStartIndex:]
+
         jsonResponse = json.loads(jsonContent)
         history(f"GPT Response:\n\n{origContent}")
 
@@ -334,7 +325,9 @@ def apply_changes(file_path: str, changes: list[dict[str, Any]], confirm: bool =
     for lineDiff in lineDiffs:
         color: str = Style.WHITE
 
-        if lineDiff.startswith("+"):
+        if lineDiff.strip() == "+++" or lineDiff.strip() == "---":
+            pass
+        elif lineDiff.startswith("+"):
             color = Style.GREEN
         elif lineDiff.startswith("-"):
             color = Style.RED
@@ -408,7 +401,7 @@ def history(message: str) -> None:
 
 def main(script_name: str, *script_args, restore: bool = False, model: str = "", confirm: bool = False):
     if model.strip() != "":
-        validatedModel: list[str] = [m for m in vars(Model) if m == model]
+        validatedModel: list[str] = [value for name, value in vars(Model).items() if not name.startswith("_") and value == model]
 
         if len(validatedModel) == 0:
             print(f"You have specified an {Style.RED}invalid{Style.END} model: {Style.CYAN}{model}{Style.END}")
@@ -470,7 +463,7 @@ def main(script_name: str, *script_args, restore: bool = False, model: str = "",
             print(status)
             history(status)
 
-            changes = post_to_openai(script_name, scriptArgs, cmdError, model)
+            changes = post_to_openai(script_name, scriptArgs, cmdError, Environment.OPENAI_MODEL)
 
             if len(changes) > 0:
                 # Create another backup of the script when there are more changes since the last one.
@@ -523,7 +516,7 @@ CURRENT_DIR: str = dirname(abspath(__file__))
 OPENAI_PROMPT: str = __read_file("openai_prompt.txt")
 OPENAI_TEMPERATURE: float = 0.4
 SCRIPT_NAME: str = "DebugAI"
-SCRIPT_DESC: str = "OpenAI assisted debugging and code correction."
+SCRIPT_DESC: str = "OpenAI ChatGPT assisted debugging and code correction."
 
 
 if __name__ == "__main__":

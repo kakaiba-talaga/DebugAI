@@ -8,13 +8,13 @@ In addition to the changes, it is required to provide a single brief but descrip
 
 Ensure to include the correct indentation and spacing for the changes.
 
-Ensure that the entirety of your response is in JSON format and conforms to the standard JSON specification.
-
 Example response:
 [
-  {"explanation": "This is just an example. This would usually be a brief but descriptive explanation of what went wrong."},
+  {"explanation": "This is where the single brief but descriptive explanation of what went wrong will go."},
   {"operation": "InsertAfter", "line": 10, "content": "x = 1\ny = 2\nz = x * y"},
   {"operation": "Delete", "line": 15, "content": ""},
   {"operation": "Replace", "line": 18, "content": "        x += 1"},
   {"operation": "Delete", "line": 20, "content": ""}
 ]
+
+From now on, the entirety of your response is only in JSON format. No talking or other comments necessary. Your response should conform to the standard JSON specification.

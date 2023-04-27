@@ -1,6 +1,6 @@
 # DebugAI
 
-OpenAI assisted debugging and code correction.
+OpenAI ChatGPT assisted debugging and code correction.
 
 This has been _inspired_ by Wolverine ➜ [https://github.com/biobootloader/wolverine](https://github.com/biobootloader/wolverine)
 
