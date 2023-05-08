@@ -97,7 +97,7 @@ Reference ➜ [https://platform.openai.com/docs/models](https://platform.openai.
 Once set, this will ask the user for confirmation before doing any changes.
 
 ```shell
-python debugai.py {SCRIPT_NAME} {SCRIPT_ARGUMENTS} --confirm=True
+python debugai.py {SCRIPT_NAME} {SCRIPT_ARGUMENTS} --confirm
 ```
 
 ### Restore Back-up
