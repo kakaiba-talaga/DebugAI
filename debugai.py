@@ -16,8 +16,11 @@ if not versionPass or not excludePass:
 
 
 from datetime import datetime
+from difflib import unified_diff
 from dotenv import load_dotenv
 from fire import Fire
+from json import loads as jsonLoads
+from json.decoder import JSONDecodeError
 from os import access, getenv, mkdir, W_OK
 from os.path import abspath, dirname, isfile, isdir, join
 from pathlib import Path
@@ -27,20 +30,12 @@ from sys import executable as py_exec
 from traceback import print_exc
 from typing import Any, Iterator, NamedTuple
 from fire import Fire
-import difflib
-import json
 import openai
 
 
 # --------------------------------------------------
 #   MODELS
 # --------------------------------------------------
-
-class Environment():
-    OPENAI_API_KEY: str
-    OPENAI_MODEL: str
-    OPENAI_ORG_ID: str
-
 
 class ChangesOp(NamedTuple):
     operation: Operation
@@ -62,6 +57,12 @@ class Message(NamedTuple):
 # --------------------------------------------------
 #   CLASSES
 # --------------------------------------------------
+
+class Environment():
+    OPENAI_API_KEY: str
+    OPENAI_MODEL: str
+    OPENAI_ORG_ID: str
+
 
 class MetaConstant(type):
     """ A metaclass that defines a class' static properties to behave similar to an actual constant. """
@@ -268,10 +269,10 @@ def __request_response(model: str, messages: list[dict[str, str]]) -> Any:
         jsonStartIndex: int = origContent.index("[")
         jsonContent: str = origContent[jsonStartIndex:]
 
-        jsonResponse = json.loads(jsonContent)
+        jsonResponse = jsonLoads(jsonContent)
         history(f"GPT Response:\n\n{origContent}")
 
-    except (json.decoder.JSONDecodeError, ValueError) as e:
+    except (JSONDecodeError, ValueError) as e:
         status = f"{Style.RED}Error{Style.END}:\n\n  Invalid JSON. {e}\n\n"
         status += f"{Style.YELLOW}GPT Response{Style.END}:\n\n  {formattedContent}\n\n"
         status += "Rerunning the query...\n"
@@ -318,7 +319,7 @@ def apply_changes(file_path: str, changes: list[dict[str, Any]], confirm: bool =
                 fileLines[change.line - 1] = f"{change.content}\n"
 
     # Get the differences between the original and the changes.
-    lineDiffs: Iterator[str] = difflib.unified_diff(originalFileLines, fileLines, lineterm = "")
+    lineDiffs: Iterator[str] = unified_diff(originalFileLines, fileLines, lineterm = "")
 
     print(f"{Style.YELLOW}Recommended changes to be made{Style.END}:")
 
